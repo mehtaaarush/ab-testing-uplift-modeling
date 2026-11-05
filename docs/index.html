@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E-mail Uplift Analysis</title>
+  <meta name="description" content="A/B test analysis and uplift modelling of a 64,000-customer randomised e-mail experiment: effect sizes with confidence intervals, heterogeneous effects, uplift models evaluated with AUUC, and off-policy evaluation of targeting rules.">
+  <meta name="author" content="Aarush Mehta">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M7 11h18v11H7z' stroke='white' stroke-width='2.4' fill='none' stroke-linejoin='round'/%3E%3Cpath d='M7 11l9 7 9-7' stroke='white' stroke-width='2.4' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-cartesian-dist-min@2.35.2/plotly-cartesian.min.js" defer></script>
+  <script src="assets/viz.js" defer></script>
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="site-header wrap">
+  <div class="top">
+    <div>
+      <p class="eyebrow">Data science portfolio · Experimentation and causal inference</p>
+      <h1>Who should get the e-mail?</h1>
+      <p class="subtitle">A randomised test of two marketing e-mails on 64,000 customers of an online retailer. First the A/B analysis: did each
+        e-mail work, and by how much? Then uplift models that predict whom each e-mail persuades, and an off-policy evaluation of targeting rules.</p>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" type="button">Dark mode</button>
+  </div>
+  <div class="meta">
+    <span>By Aarush Mehta</span>
+    <span id="meta-size">Loading data…</span>
+    <a href="https://github.com/mehtaaarush/ab-testing-uplift-modeling">Code on GitHub</a>
+    <a href="#methods">Methods</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <div class="hero-figure">
+      <div class="label">Extra revenue per customer, men's e-mail</div>
+      <div class="value" id="hero-value">–</div>
+      <p class="caption" id="hero-caption"></p>
+    </div>
+    <div class="kpis">
+      <div class="tile" id="kpi-visit"></div>
+      <div class="tile" id="kpi-conversion"></div>
+      <div class="tile" id="kpi-srm"></div>
+      <div class="tile" id="kpi-targeting"></div>
+    </div>
+  </div>
+
+  <section aria-labelledby="s-health">
+    <h2 id="s-health">Can the experiment be trusted?</h2>
+    <p class="lede">Customers were randomly split three ways for two weeks: a men's merchandise e-mail, a women's merchandise e-mail, or no e-mail.
+      Before reading any result, check that randomisation worked: the arms should be the planned size and look alike before treatment.</p>
+    <div class="grid two">
+      <div class="card" id="card-srm">
+        <div class="card-head">
+          <div><h3>Sample ratio check</h3><p>Customers per arm against the planned equal split</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart short" id="chart-srm" role="img" aria-label="Bar chart of customers in each experiment arm"></div>
+        <div class="table-view"></div>
+        <p class="footnote" id="srm-note"></p>
+      </div>
+      <div class="card" id="card-balance">
+        <div class="card-head">
+          <div><h3>Covariate balance</h3><p>Standardised mean difference vs. the no-e-mail arm; |SMD| under 0.1 is balanced</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-balance" role="img" aria-label="Dot plot of standardised mean differences for eleven pre-treatment covariates"></div>
+        <div class="table-view"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="s-effects">
+    <h2 id="s-effects">Did the e-mails work?</h2>
+    <p class="lede">Each e-mail is compared with no e-mail on three outcomes over the two weeks after sending. Rates use a two-proportion z-test,
+      revenue uses Welch's t-test, and all six p-values are Holm-adjusted as one family.</p>
+    <div class="controls">
+      <div class="control">
+        <span id="metric-label">Outcome</span>
+        <div class="segmented" id="metric-control" role="group" aria-labelledby="metric-label">
+          <button type="button" data-metric="visit" aria-pressed="true">Visit rate</button>
+          <button type="button" data-metric="conversion" aria-pressed="false">Conversion rate</button>
+          <button type="button" data-metric="spend" aria-pressed="false">Revenue per customer</button>
+        </div>
+      </div>
+      <div class="control">
+        <span id="scale-label">Show effect as</span>
+        <div class="segmented" id="scale-control" role="group" aria-labelledby="scale-label">
+          <button type="button" data-scale="abs" aria-pressed="true">Absolute</button>
+          <button type="button" data-scale="rel" aria-pressed="false">Relative</button>
+        </div>
+      </div>
+    </div>
+    <div class="grid two">
+      <div class="card" id="card-levels">
+        <div class="card-head">
+          <div><h3 id="levels-title">Outcome by arm</h3><p>Two weeks after the send</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-levels" role="img" aria-label="Bar chart of the selected outcome in each experiment arm"></div>
+        <div class="table-view"></div>
+      </div>
+      <div class="card" id="card-effects">
+        <div class="card-head">
+          <div><h3 id="effects-title">Effect vs. no e-mail</h3><p>Point estimate with 95% confidence interval</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-effects" role="img" aria-label="Dot and interval chart of each e-mail's effect"></div>
+        <div class="table-view"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><div><h3>All results</h3><p>Holm-adjusted p-values control the family-wise error rate across all six comparisons</p></div></div>
+      <div class="table-view" id="results-table" style="display:block;max-height:none;border-top:0"></div>
+    </div>
+    <div class="insights" id="insights-effects"></div>
+  </section>
+
+  <section aria-labelledby="s-robust">
+    <h2 id="s-robust">Is the revenue result robust?</h2>
+    <p class="lede">Revenue is the outcome the business cares about and the hardest to measure: about 99% of customers spend nothing in two weeks,
+      and a few spend hundreds. Three different interval methods are compared below.</p>
+    <div class="grid two">
+      <div class="card" id="card-robust">
+        <div class="card-head">
+          <div><h3>Extra revenue per customer, three ways</h3><p>95% intervals: Welch t-test, bootstrap (4,000 resamples), regression-adjusted</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-robust" role="img" aria-label="Dot and interval chart comparing three interval methods for revenue"></div>
+        <div class="table-view"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>Variance reduction from covariates</h3><p>Lin (2013) regression adjustment with robust (HC2) errors</p></div></div>
+        <div class="table-view" id="adjust-table" style="display:block;max-height:none;border-top:0"></div>
+        <p class="footnote">Past spend, recency, channel and area barely predict who buys in a two-week window, so adjusting for them
+          narrows the intervals by under 2%. The unadjusted estimates stand.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="s-segments">
+    <h2 id="s-segments">Who responds?</h2>
+    <p class="lede">The average effect hides large differences between customers. Each segment below is its own small A/B test (segments with fewer
+      than 300 customers per arm are omitted). These are exploratory, so read wide intervals with care.</p>
+    <div class="controls">
+      <label class="control">Split customers by
+        <select id="segment-control"></select>
+      </label>
+      <label class="control">Outcome
+        <select id="segment-metric">
+          <option value="visit" selected>Visit rate</option>
+          <option value="conversion">Conversion rate</option>
+          <option value="spend">Revenue per customer</option>
+        </select>
+      </label>
+    </div>
+    <div class="card" id="card-segments">
+      <div class="card-head">
+        <div><h3 id="segments-title">Effect by segment</h3><p>Each e-mail vs. no e-mail within the segment, 95% confidence interval</p></div>
+        <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+      </div>
+      <div class="chart" id="chart-segments" role="img" aria-label="Dot and interval chart of each e-mail's effect within customer segments"></div>
+      <div class="table-view"></div>
+    </div>
+    <div class="insights" id="insights-segments"></div>
+  </section>
+
+  <section aria-labelledby="s-uplift">
+    <h2 id="s-uplift">Can a model find the persuadable customers?</h2>
+    <p class="lede" id="uplift-lede">Uplift models predict, for each customer, how much an e-mail changes their chance of visiting. Four learners
+      were trained on 70% of customers; the one with the best cross-validated AUUC was kept, and everything shown is scored on the untouched 30%.</p>
+    <div class="controls">
+      <div class="control">
+        <span id="campaign-label">Campaign</span>
+        <div class="segmented" id="campaign-control" role="group" aria-labelledby="campaign-label">
+          <button type="button" data-campaign="mens" aria-pressed="false">Men's e-mail</button>
+          <button type="button" data-campaign="womens" aria-pressed="true">Women's e-mail</button>
+        </div>
+      </div>
+      <label class="control" style="min-width:260px">Model
+        <select id="uplift-model"></select>
+      </label>
+    </div>
+    <div class="grid two">
+      <div class="card" id="card-curve">
+        <div class="card-head">
+          <div><h3>Uplift curve</h3><p>Incremental visits if only the top share of customers is e-mailed (hold-out)</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-curve" role="img" aria-label="Uplift curve against random targeting"></div>
+        <div class="table-view"></div>
+      </div>
+      <div class="card" id="card-deciles">
+        <div class="card-head">
+          <div><h3>Predicted vs. observed uplift by decile</h3><p>Hold-out customers ranked by the model; observed = e-mail minus control visit rate</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-deciles" role="img" aria-label="Bar chart of observed uplift by predicted decile with predicted values"></div>
+        <div class="table-view"></div>
+      </div>
+    </div>
+    <div class="grid two" style="margin-top:16px">
+      <div class="card" id="card-models">
+        <div class="card-head">
+          <div><h3>Model comparison</h3><p>AUUC gain over random targeting on the hold-out, 95% bootstrap interval</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart short" id="chart-models" role="img" aria-label="Bar chart of AUUC gain by model"></div>
+        <div class="table-view"></div>
+        <p class="footnote">AUUC gain: average height of the uplift curve above the random-targeting line, as a share of the total effect. 0 means no better than random.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>Who the model targets</h3><p>Average traits of the top and bottom 30% by predicted uplift (hold-out)</p></div></div>
+        <div class="table-view" id="profile-table" style="display:block;max-height:none;border-top:0"></div>
+        <p class="footnote" id="profile-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="s-simulator">
+    <h2 id="s-simulator">Targeting simulator</h2>
+    <p class="lede">E-mails are not free: each send costs money and risks fatigue and unsubscribes. Set the economics and see how many customers
+      are worth e-mailing when they are ranked by the model, compared with picking customers at random.</p>
+    <div class="controls">
+      <label class="control">Campaign
+        <select id="sim-campaign">
+          <option value="womens" selected>Women's e-mail</option>
+          <option value="mens">Men's e-mail</option>
+        </select>
+      </label>
+      <label class="control" style="flex:1;min-width:200px">Value of one extra visit <output id="out-value"></output>
+        <input type="range" id="sim-value" min="0" max="30" step="0.5">
+      </label>
+      <label class="control" style="flex:1;min-width:200px">Cost per e-mail <output id="out-cost"></output>
+        <input type="range" id="sim-cost" min="0" max="1" step="0.01">
+      </label>
+      <label class="control" style="flex:1;min-width:200px">Share of customers e-mailed <output id="out-share"></output>
+        <input type="range" id="sim-share" min="5" max="100" step="5">
+      </label>
+    </div>
+    <div class="grid two">
+      <div class="card" id="card-sim">
+        <div class="card-head">
+          <div><h3>Net value per 1,000 customers</h3><p>Incremental visits × value − e-mails × cost, hold-out estimate</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-sim" role="img" aria-label="Line chart of net value by share of customers e-mailed, model-ranked and random"></div>
+        <div class="table-view"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>At this setting</h3><p id="sim-sub"></p></div></div>
+        <div class="readout" id="sim-readout" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="s-policy">
+    <h2 id="s-policy">Which policy should the business run?</h2>
+    <p class="lede" id="policy-lede">Five ways to decide who gets which e-mail, all scored on the same hold-out customers. Because the arms were
+      randomised with known probabilities, inverse-propensity weighting gives an unbiased estimate of what each policy would have produced.</p>
+    <div class="controls">
+      <div class="control">
+        <span id="policy-label">Outcome per 1,000 customers</span>
+        <div class="segmented" id="policy-control" role="group" aria-labelledby="policy-label">
+          <button type="button" data-outcome="visit" aria-pressed="true">Visits</button>
+          <button type="button" data-outcome="conversion" aria-pressed="false">Orders</button>
+          <button type="button" data-outcome="spend" aria-pressed="false">Revenue</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="card-policy">
+      <div class="card-head">
+        <div><h3 id="policy-title">Visits per 1,000 customers</h3><p>Inverse-propensity estimate with 95% bootstrap interval</p></div>
+        <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+      </div>
+      <div class="chart short" id="chart-policy" role="img" aria-label="Bar chart comparing targeting policies"></div>
+      <div class="table-view"></div>
+    </div>
+    <div class="insights" id="insights-policy"></div>
+  </section>
+
+  <section aria-labelledby="s-power">
+    <h2 id="s-power">Planning the next test</h2>
+    <p class="lede" id="power-lede"></p>
+    <div class="controls">
+      <label class="control">Outcome
+        <select id="pw-metric">
+          <option value="visit">Visit rate</option>
+          <option value="conversion" selected>Conversion rate</option>
+        </select>
+      </label>
+      <label class="control">Baseline rate (%)
+        <input type="number" id="pw-base" min="0.1" max="90" step="0.01">
+      </label>
+      <label class="control">Lift to detect (percentage points)
+        <input type="number" id="pw-lift" min="0.01" max="20" step="0.01">
+      </label>
+      <label class="control">Significance level
+        <select id="pw-alpha">
+          <option value="0.01">0.01</option>
+          <option value="0.05" selected>0.05</option>
+          <option value="0.1">0.10</option>
+        </select>
+      </label>
+      <label class="control">Power
+        <select id="pw-power">
+          <option value="0.8" selected>80%</option>
+          <option value="0.9">90%</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid two">
+      <div class="card" id="card-power">
+        <div class="card-head">
+          <div><h3>Customers needed per arm</h3><p>Two-sided test of two proportions, by the lift you want to detect</p></div>
+          <button class="view-toggle" type="button" aria-pressed="false">Table</button>
+        </div>
+        <div class="chart" id="chart-power" role="img" aria-label="Line chart of required sample size per arm by detectable lift"></div>
+        <div class="table-view"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>Required sample</h3><p>Normal approximation, equal arms</p></div></div>
+        <div class="readout" id="pw-readout" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="methods">
+    <h2 id="methods">Methods</h2>
+    <div class="methods">
+      <p><strong>Data.</strong> Kevin Hillstrom's MineThatData e-mail challenge (2008): 64,000 customers who bought in the past year, randomly assigned
+        to a men's e-mail, a women's e-mail or no e-mail, with visits, conversions and spend tracked for two weeks. The download is checked against a SHA-256 hash.</p>
+      <p><strong>Randomisation checks.</strong> A chi-square sample-ratio-mismatch test on arm sizes and standardised mean differences for every
+        pre-treatment covariate.</p>
+      <p><strong>Average effects.</strong> Two-proportion z-tests with Wald intervals for rates, Welch's t-test for revenue, delta-method intervals
+        for relative lift, and Holm correction across the six comparisons. Revenue is cross-checked with a percentile bootstrap and Lin's (2013)
+        fully interacted regression adjustment with HC2 standard errors.</p>
+      <p><strong>Heterogeneity.</strong> The same tests within segments defined by pre-treatment traits. These are exploratory; the uplift models
+        below are the principled version of the same question.</p>
+      <p><strong>Uplift models.</strong> T-learner and S-learner (histogram gradient boosting), the class-transformation method, and a T-learner with
+        logistic regression, all predicting the change in visit probability. Conversions (about 1%) are too sparse to model reliably.</p>
+      <p><strong>Evaluation.</strong> A stratified 70/30 customer split. The model is chosen by five-fold cross-validated AUUC on the 70%; the
+        uplift curve, deciles and a bootstrap interval for AUUC are computed on the untouched 30%.</p>
+      <p><strong>Policy evaluation.</strong> Per-arm response models choose an e-mail (or none) per customer. Each policy is valued on the hold-out
+        by inverse-propensity weighting, with paired bootstrap intervals for the difference from sending the men's e-mail to everyone.</p>
+      <p><strong>Limitations.</strong> One two-week campaign from 2008, so long-term effects (unsubscribes, repeat purchases) are unobserved.
+        The simulator's value per visit is an average (incremental revenue ÷ incremental visits), not a per-customer estimate.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    Data: <a href="https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html">Kevin Hillstrom, MineThatData E-Mail Analytics and Data Mining Challenge</a> ·
+    Built by Aarush Mehta · <a href="https://github.com/mehtaaarush/ab-testing-uplift-modeling">Source code</a> (MIT)
+  </div>
+</footer>
+</body>
+</html>
