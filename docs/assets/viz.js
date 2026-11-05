@@ -14,6 +14,7 @@
 
   function tokens() {
     const t = {
+      font: cssVar('--font-chart') || FONT,
       surface: cssVar('--surface-1'),
       surface2: cssVar('--surface-2'),
       text: cssVar('--text-primary'),
@@ -61,13 +62,13 @@
     const base = {
       paper_bgcolor: t.surface,
       plot_bgcolor: t.surface,
-      font: { family: FONT, size: 12, color: t.text2 },
+      font: { family: t.font, size: 12, color: t.text2 },
       margin: { l: 8, r: 14, t: 12, b: 8 },
       xaxis: Object.assign(axis(t), { showgrid: false, showline: true }),
       yaxis: Object.assign(axis(t), { showgrid: true, showline: false }),
       hoverlabel: {
         bgcolor: t.surface, bordercolor: t.baseline, align: 'left',
-        font: { family: FONT, color: t.text, size: 12 },
+        font: { family: t.font, color: t.text, size: 12 },
       },
       legend: {
         orientation: 'h', x: 0, xanchor: 'left', y: 1.0, yanchor: 'bottom',
@@ -196,7 +197,7 @@
   }
 
   function initTheme(button) {
-    const KEY = 'dashboard-theme';
+    const KEY = root.dataset.themeKey || 'dashboard-theme';
     const media = global.matchMedia('(prefers-color-scheme: dark)');
     try {
       const saved = global.localStorage.getItem(KEY);
@@ -217,6 +218,13 @@
     media.addEventListener('change', () => {
       if (!root.getAttribute('data-theme')) { label(); redrawAll(); }
     });
+  }
+
+  /* Web fonts can arrive after the first draw (some only start loading when a chart asks
+     for them), so re-measure the charts whenever a batch of fonts finishes loading. */
+  if (document.fonts) {
+    document.fonts.ready.then(redrawAll);
+    document.fonts.addEventListener('loadingdone', redrawAll);
   }
 
   const nf = (opts) => new Intl.NumberFormat('en-US', opts);

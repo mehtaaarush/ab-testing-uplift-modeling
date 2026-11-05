@@ -1,18 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme-key="abtest-theme">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>E-mail Uplift Analysis</title>
   <meta name="description" content="A/B test analysis and uplift modelling of a 64,000-customer randomised e-mail experiment: effect sizes with confidence intervals, heterogeneous effects, uplift models evaluated with AUUC, and off-policy evaluation of targeting rules.">
   <meta name="author" content="Aarush Mehta">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M7 11h18v11H7z' stroke='white' stroke-width='2.4' fill='none' stroke-linejoin='round'/%3E%3Cpath d='M7 11l9 7 9-7' stroke='white' stroke-width='2.4' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f4ab9'/%3E%3Cpath d='M7 11h18v11H7z' stroke='white' stroke-width='2.4' fill='none' stroke-linejoin='round'/%3E%3Cpath d='M7 11l9 7 9-7' stroke='white' stroke-width='2.4' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#f6f1e7">
+  <script>try{var r=document.documentElement,s=localStorage.getItem(r.dataset.themeKey);if(s==='light'||s==='dark')r.setAttribute('data-theme',s)}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
   <link rel="stylesheet" href="assets/theme.css">
   <script src="https://cdn.jsdelivr.net/npm/plotly.js-cartesian-dist-min@2.35.2/plotly-cartesian.min.js" defer></script>
   <script src="assets/viz.js" defer></script>
   <script src="assets/app.js" defer></script>
 </head>
 <body>
+<div class="masthead">
 <header class="site-header wrap">
   <div class="top">
     <div>
@@ -30,6 +36,7 @@
     <a href="#methods">Methods</a>
   </div>
 </header>
+</div>
 
 <main class="wrap">
   <div class="hero">
