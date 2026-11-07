@@ -81,26 +81,58 @@
     });
   }
 
+  // The pipeline writes straight apostrophes into its labels; the page sets them typographically.
+  function curly(o) {
+    if (typeof o === 'string') return o.replace(/'/g, '’');
+    if (Array.isArray(o)) return o.map(curly);
+    if (o && typeof o === 'object') { Object.keys(o).forEach((k) => { o[k] = curly(o[k]); }); }
+    return o;
+  }
+
+  /* ---------- Contents ---------- */
+  // Under 60rem the contents fold into a menu; at every width the section in view is marked current.
+  function contents() {
+    const nav = document.querySelector('.contents');
+    if (!nav) return;
+    const button = nav.querySelector('.contents-toggle');
+    const setOpen = (open) => { nav.classList.toggle('open', open); button.setAttribute('aria-expanded', String(open)); };
+    button.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
+    nav.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(false); });
+    const links = Array.from(nav.querySelectorAll('a[href^="#"]'));
+    const sections = links.map((a) => { const h = document.getElementById(a.getAttribute('href').slice(1)); return h && h.closest('section'); });
+    let queued = false;
+    const mark = () => {
+      queued = false;
+      let current = -1;
+      sections.forEach((sec, i) => { if (sec && sec.getBoundingClientRect().top <= window.innerHeight * 0.3) current = i; });
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atEnd && current >= 0) current = sections.length - 1; // the last sections cannot scroll up to the line
+      links.forEach((a, i) => { if (i === current) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current'); });
+    };
+    window.addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(mark); } }, { passive: true });
+    mark();
+  }
+
   /* ---------- Hero ---------- */
   function hero() {
     const s = effect('mens', 'spend');
     const v = effect('mens', 'visit');
     const c = effect('mens', 'conversion');
     el('hero-value').textContent = signedUsd(s.diff);
-    el('hero-caption').textContent = fmt.usd(s.control) + ' → ' + fmt.usd(s.treatment) + ' per customer over two weeks (' + fmt.signedPct(s.lift, 0) +
+    el('hero-caption').textContent = fmt.usd(s.control) + ' to ' + fmt.usd(s.treatment) + ' per customer over two weeks (' + fmt.signedPct(s.lift, 0) +
       '; 95% CI ' + fmt.usd(s.ci_low) + ' to ' + fmt.usd(s.ci_high) + '). That is about ' + fmt.usd(s.diff * 1000, 0) + ' per 1,000 customers e-mailed.';
-    Viz.tile('kpi-visit', { label: "Visit rate, men's e-mail", value: fmt.pp(v.diff, 1), delta: fmt.signedPct(v.lift, 0), tone: 'up-good',
-      note: fmt.pct(v.control, 1) + ' → ' + fmt.pct(v.treatment, 1) });
-    Viz.tile('kpi-conversion', { label: "Conversion rate, men's e-mail", value: fmt.pp(c.diff, 2), delta: fmt.signedPct(c.lift, 0), tone: 'up-good',
-      note: fmt.pct(c.control, 2) + ' → ' + fmt.pct(c.treatment, 2) });
+    Viz.tile('kpi-visit', { label: "Visit rate, men’s e-mail", value: fmt.pp(v.diff, 1), delta: fmt.signedPct(v.lift, 0), tone: 'up-good',
+      note: 'from ' + fmt.pct(v.control, 1) + ' to ' + fmt.pct(v.treatment, 1) });
+    Viz.tile('kpi-conversion', { label: "Conversion rate, men’s e-mail", value: fmt.pp(c.diff, 2), delta: fmt.signedPct(c.lift, 0), tone: 'up-good',
+      note: 'from ' + fmt.pct(c.control, 2) + ' to ' + fmt.pct(c.treatment, 2) });
     const maxSmd = Math.max(...D.balance.map((r) => Math.max(Math.abs(r.mens), Math.abs(r.womens))));
     Viz.tile('kpi-srm', { label: 'Randomisation checks', value: D.srm.passed ? 'Passed' : 'Failed',
       note: 'Sample-ratio p = ' + D.srm.p_value.toFixed(2) + '; largest |SMD| ' + maxSmd.toFixed(3) });
     const w = D.uplift.campaigns.womens;
     const sel = w.models.find((m) => m.key === w.selected);
-    Viz.tile('kpi-targeting', { label: "Women's e-mail, top 30% by model", value: fmt.pct(sel.capture_30, 0),
+    Viz.tile('kpi-targeting', { label: "Women’s e-mail, top 30% by model", value: fmt.pct(sel.capture_30, 0),
       note: 'of its extra visits from 30% of the sends' });
-    el('meta-size').textContent = fmt.int(D.meta.customers) + ' customers · three arms · two-week outcome window';
+    el('meta-size').textContent = fmt.int(D.meta.customers) + ' customers, three arms, two-week outcome window';
   }
 
   /* ---------- Experiment health ---------- */
@@ -111,15 +143,15 @@
       build: (t) => ({
         data: [{
           type: 'bar', x: ALL_ARMS.map((a) => NAMES[a]), y: counts,
-          marker: { color: ALL_ARMS.map((a) => armColor(t, a)), cornerradius: 4 },
-          width: Viz.barWidth('chart-srm', 3, false, 64, 0.5),
-          text: counts.map(fmt.int), textposition: 'outside', textfont: { color: t.text2, size: 12 }, cliponaxis: false,
+          marker: { color: ALL_ARMS.map((a) => armColor(t, a)), cornerradius: 2 },
+          width: Viz.barWidth('chart-srm', 3, false, 24, 0.5),
+          text: counts.map(fmt.int), textposition: 'outside', textfont: { color: t.text2, size: 12 }, constraintext: 'none', cliponaxis: false,
           hovertemplate: '%{x}: %{y:,} customers<extra></extra>',
         }],
         layout: {
           yaxis: { range: [0, Math.max(...counts) * 1.2], tickformat: ',.0f' },
           shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: n / 3, y1: n / 3, line: { color: t.text2, width: 1, dash: 'dot' } }],
-          annotations: [{ xref: 'paper', x: 1, y: n / 3, yanchor: 'bottom', xanchor: 'right', text: 'Equal split', showarrow: false,
+          annotations: [{ xref: 'paper', x: 1 / 3, y: n / 3, yanchor: 'bottom', xanchor: 'center', text: 'Equal split', showarrow: false, // between the first two bars, clear of their counts
             font: { color: t.muted, size: 11 } }],
         },
       }),
@@ -140,7 +172,7 @@
         })),
         shapes: [{ type: 'rect', yref: 'paper', y0: 0, y1: 1, x0: -0.1, x1: 0.1, fillcolor: t.surface2, line: { width: 0 }, layer: 'below' }],
       }),
-      table: () => ({ columns: ['Covariate', "Men's e-mail", "Women's e-mail"],
+      table: () => ({ columns: ['Covariate', "Men’s e-mail", "Women’s e-mail"],
         rows: D.balance.map((r) => [r.covariate, r.mens.toFixed(3), r.womens.toFixed(3)]) }),
     });
   }
@@ -156,9 +188,9 @@
         return {
           data: [{
             type: 'bar', x: ALL_ARMS.map((a) => NAMES[a]), y: ys,
-            marker: { color: ALL_ARMS.map((a) => armColor(t, a)), cornerradius: 4 },
-            width: Viz.barWidth('chart-levels', 3, false, 64, 0.5),
-            text: ys.map(m.level), textposition: 'outside', textfont: { color: t.text2, size: 12 }, cliponaxis: false,
+            marker: { color: ALL_ARMS.map((a) => armColor(t, a)), cornerradius: 2 },
+            width: Viz.barWidth('chart-levels', 3, false, 24, 0.5),
+            text: ys.map(m.level), textposition: 'outside', textfont: { color: t.text2, size: 12 }, constraintext: 'none', cliponaxis: false,
             customdata: ys.map(m.level), hovertemplate: '%{x}: %{customdata}<extra></extra>',
           }],
           layout: { yaxis: Object.assign({ range: [0, Math.max(...ys) * 1.22] }, m.levelAxis) },
@@ -227,12 +259,12 @@
 
     const box = el('results-table');
     Viz.renderTable(box, {
-      columns: ['E-mail', 'Outcome', 'No e-mail', 'E-mail', 'Difference (95% CI)', 'Relative lift (95% CI)', 'p (Holm)'],
+      columns: ['E-mail', 'Outcome', 'No e-mail', 'With e-mail', 'Difference (95% CI)', 'Relative lift (95% CI)', 'p (Holm)'],
       rows: D.effects.map((r) => {
         const m = METRIC[r.metric];
         return [NAMES[r.arm], D.meta.metrics[r.metric], m.level(r.control), m.level(r.treatment),
-          m.diff(r.diff) + ' (' + m.diff(r.ci_low) + ' to ' + m.diff(r.ci_high) + ')',
-          fmt.signedPct(r.lift, 0) + ' (' + fmt.signedPct(r.lift_low, 0) + ' to ' + fmt.signedPct(r.lift_high, 0) + ')',
+          m.diff(r.diff) + '\n' + m.diff(r.ci_low) + ' to ' + m.diff(r.ci_high), // the interval sits under its estimate
+          fmt.signedPct(r.lift, 0) + '\n' + fmt.signedPct(r.lift_low, 0) + ' to ' + fmt.signedPct(r.lift_high, 0),
           pText(r.p_holm)];
       }),
     });
@@ -243,7 +275,7 @@
     const mc = effect('mens', 'conversion');
     insights('insights-effects', [
       ['Both e-mails work', 'All six effects are positive and significant after Holm correction (largest adjusted p = ' + worstP.toFixed(4) + ').'],
-      ["The men's e-mail wins on every outcome", 'It lifts visits by ' + fmt.pp(mv.diff, 1) + ' against ' + fmt.pp(wv.diff, 1) +
+      ["The men’s e-mail wins on every outcome", 'It lifts visits by ' + fmt.pp(mv.diff, 1) + ' against ' + fmt.pp(wv.diff, 1) +
         ', and revenue by ' + signedUsd(ms.diff) + ' against ' + signedUsd(ws.diff) + ' per customer.'],
       ['Big relative lifts, small absolute numbers', 'Conversion more than doubles (' + fmt.signedPct(mc.lift, 0) + '), but only from ' +
         fmt.pct(mc.control, 2) + ' to ' + fmt.pct(mc.treatment, 2) + '. Most of the response is browsing, not buying.'],
@@ -336,17 +368,17 @@
     redraw();
 
     const seg = (dim, level, arm) => D.segments.rows.find((r) => r.dimension === dim && r.metric === 'visit' && r.level === level && r.arm === arm);
-    const wm = seg('purchase_mix', "Men's only", 'womens'), ww = seg('purchase_mix', "Women's only", 'womens');
-    const mm = seg('purchase_mix', "Men's only", 'mens'), mw = seg('purchase_mix', "Women's only", 'mens'), mb = seg('purchase_mix', 'Both', 'mens');
+    const wm = seg('purchase_mix', "Men’s only", 'womens'), ww = seg('purchase_mix', "Women’s only", 'womens');
+    const mm = seg('purchase_mix', "Men’s only", 'mens'), mw = seg('purchase_mix', "Women’s only", 'mens'), mb = seg('purchase_mix', 'Both', 'mens');
     const visitRows = D.segments.rows.filter((r) => r.metric === 'visit' && r.arm === 'womens');
     const womensAhead = visitRows.filter((r) => r.diff > seg(r.dimension, r.level, 'mens').diff).map((r) => r.level);
     insights('insights-segments', [
-      ["The women's e-mail misses men's buyers", 'It lifts visits by ' + fmt.pp(ww.diff, 1) + " among women's-only buyers but just " +
-        fmt.pp(wm.diff, 1) + " among men's-only buyers."],
-      ["The men's e-mail works for everyone", "It lifts visits by " + fmt.pp(mm.diff, 1) + " for men's-only buyers, " + fmt.pp(mw.diff, 1) +
-        " for women's-only buyers and " + fmt.pp(mb.diff, 1) + ' for customers who buy both.'],
-      ['Only one segment is a tie', "Among women's-only buyers the two e-mails do equally well (" + fmt.pp(ww.diff, 1) + ' vs. ' + fmt.pp(mw.diff, 1) +
-        '). Of the other ' + (visitRows.length - womensAhead.length) + " segments, the men's e-mail has the larger effect in every one."],
+      ["The women’s e-mail misses men’s buyers", 'It lifts visits by ' + fmt.pp(ww.diff, 1) + " among women’s-only buyers but just " +
+        fmt.pp(wm.diff, 1) + " among men’s-only buyers."],
+      ["The men’s e-mail works for everyone", "It lifts visits by " + fmt.pp(mm.diff, 1) + " for men’s-only buyers, " + fmt.pp(mw.diff, 1) +
+        " for women’s-only buyers and " + fmt.pp(mb.diff, 1) + ' for customers who buy both.'],
+      ['Only one segment is a tie', "Among women’s-only buyers the two e-mails do equally well (" + fmt.pp(ww.diff, 1) + ' vs. ' + fmt.pp(mw.diff, 1) +
+        '). Of the other ' + (visitRows.length - womensAhead.length) + " segments, the men’s e-mail has the larger effect in every one."],
     ]);
   }
 
@@ -408,7 +440,7 @@
         return {
           data: [
             { type: 'bar', name: 'Observed (hold-out)', x: d.map((r) => r.group), y: d.map((r) => r.observed * 100),
-              marker: { color: armColor(t, state.campaign), cornerradius: 4 }, width: 0.6,
+              marker: { color: armColor(t, state.campaign), cornerradius: 2 }, width: Viz.barWidth('chart-deciles', 10, false, 24, 0.6),
               error_y: { type: 'data', symmetric: false, array: d.map((r) => (r.ci_high - r.observed) * 100),
                 arrayminus: d.map((r) => (r.observed - r.ci_low) * 100), color: t.text2, thickness: 1.2, width: 0 },
               customdata: d.map((r) => [fmt.pp(r.observed, 1), fmt.pp(r.ci_low, 1), fmt.pp(r.ci_high, 1)]),
@@ -435,11 +467,11 @@
         return {
           data: [{
             type: 'bar', orientation: 'h', y: ms.map((m) => m.name), x: ms.map((m) => m.test_auuc),
-            marker: { color: ms.map((m) => (m.key === C().selected ? color : t.deemph)), cornerradius: 4 },
+            marker: { color: ms.map((m) => (m.key === C().selected ? color : t.deemph)), cornerradius: 2 },
             width: Viz.barWidth('chart-models', ms.length, true, 22, 0.6),
             error_x: { type: 'data', symmetric: false, array: ms.map((m) => m.test_high - m.test_auuc),
               arrayminus: ms.map((m) => m.test_auuc - m.test_low), color: t.text2, thickness: 1.2, width: 0 },
-            customdata: ms.map((m) => [m.test_low.toFixed(2), m.test_high.toFixed(2), m.cv_auuc.toFixed(3), m.key === C().selected ? ' · selected by cross-validation' : '']),
+            customdata: ms.map((m) => [m.test_low.toFixed(2), m.test_high.toFixed(2), m.cv_auuc.toFixed(3), m.key === C().selected ? ', selected by cross-validation' : '']),
             hovertemplate: '<b>%{y}</b>%{customdata[3]}<br>Hold-out AUUC gain %{x:.3f} (%{customdata[0]} to %{customdata[1]})<br>Cross-validated %{customdata[2]}<extra></extra>',
           }],
           layout: {
@@ -461,9 +493,9 @@
         rows: C().profile.map((r) => [r.trait, fmtTrait(r.trait, r.top), fmtTrait(r.trait, r.bottom), fmtTrait(r.trait, r.all)]),
       });
       const sel = modelInfo(C().selected);
-      const womensTrait = C().profile.find((r) => r.trait.indexOf("women's") >= 0);
+      const womensTrait = C().profile.find((r) => r.trait.indexOf("women’s") >= 0);
       el('profile-note').textContent = sel.test_low > 0
-        ? "The model's ranking is mostly about past purchases: " + fmt.pct(womensTrait.top, 0) + " of its top 30% bought women's items, against " +
+        ? "The model’s ranking is mostly about past purchases: " + fmt.pct(womensTrait.top, 0) + " of its top 30% bought women’s items, against " +
           fmt.pct(womensTrait.bottom, 0) + ' of its bottom 30%.'
         : "This e-mail lifts visits across the board, so there is little to rank on: the hold-out AUUC interval includes zero and targeting is close to random.";
     }
@@ -524,7 +556,7 @@
             showlegend: true, hovermode: 'x unified', margin: { t: 30 },
             xaxis: Object.assign({ title: { text: 'Share of customers e-mailed (%)' }, ticksuffix: '%', range: [0, 100] }, Viz.crosshair(t)),
             yaxis: { title: { text: 'Net value per 1,000 customers' }, tickprefix: '$', tickformat: ',.0f', zeroline: true, zerolinecolor: t.baseline },
-            shapes: [{ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: chosen, x1: chosen, line: { color: t.text2, width: 1, dash: 'dot' } }],
+            shapes: [{ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: chosen, x1: chosen, line: { color: t.person, width: 1.5, dash: 'dot' } }],
             annotations: [{ x: chosen, yref: 'paper', y: 0.02, yanchor: 'bottom', xanchor: 'left', xshift: 4, text: 'Your share', showarrow: false,
               font: { color: t.muted, size: 11 } }],
           },
@@ -546,7 +578,7 @@
       el('out-value').textContent = fmt.usd(c.V);
       el('out-cost').textContent = fmt.usd(c.cst);
       el('out-share').textContent = share.value + '%';
-      el('sim-sub').textContent = (campaign.value === 'mens' ? "Men's" : "Women's") + ' e-mail, ' + share.value + '% of customers ranked by predicted uplift';
+      el('sim-sub').textContent = (campaign.value === 'mens' ? "Men’s" : "Women’s") + ' e-mail, ' + share.value + '% of customers ranked by predicted uplift';
       const box = el('sim-readout');
       box.textContent = '';
       const big = document.createElement('span');
@@ -562,7 +594,7 @@
             fmt.usd(c.net[c.net.length - 1], 0) + '.',
       ];
       box.appendChild(big);
-      lines.forEach((l) => { const p = document.createElement('p'); p.style.margin = '6px 0 0'; p.textContent = l; box.appendChild(p); });
+      lines.forEach((l) => { const p = document.createElement('p'); p.textContent = l; box.appendChild(p); });
     }
 
     function update() { readout(); card.update(); }
@@ -584,7 +616,7 @@
         return {
           data: [{
             type: 'bar', orientation: 'h', y: rows.map((r) => r.policy), x: rows.map((r) => val(r, '_per_1000')),
-            marker: { color: rows.map((r) => (r.policy === P.baseline ? t.series[0] : t.deemph)), cornerradius: 4 },
+            marker: { color: rows.map((r) => (r.policy === P.baseline ? t.series[0] : t.deemph)), cornerradius: 2 },
             width: Viz.barWidth('chart-policy', rows.length, true, 22, 0.6),
             error_x: { type: 'data', symmetric: false, array: rows.map((r) => val(r, '_high') - val(r, '_per_1000')),
               arrayminus: rows.map((r) => val(r, '_per_1000') - val(r, '_low')), color: t.text2, thickness: 1.2, width: 0 },
@@ -615,10 +647,10 @@
     const best = find('Best e-mail for each customer'), half = find('Best e-mail, top half by predicted uplift');
     const keep = (half.visit_per_1000 - none.visit_per_1000) / (mensAll.visit_per_1000 - none.visit_per_1000);
     insights('insights-policy', [
-      ["Send the men's e-mail", 'It produces the most visits (' + fmt.num(mensAll.visit_per_1000, 0) + ' per 1,000 customers vs. ' +
+      ["Send the men’s e-mail", 'It produces the most visits (' + fmt.num(mensAll.visit_per_1000, 0) + ' per 1,000 customers vs. ' +
         fmt.num(none.visit_per_1000, 0) + ' with no e-mail) and the most revenue of any policy.'],
-      ["Personalising doesn't help here", 'Choosing the better e-mail per customer changes visits by ' + signedNum(best.visit_vs_baseline) +
-        ' per 1,000 (95% CI ' + signedNum(best.visit_vs_low) + ' to ' + signedNum(best.visit_vs_high) + "). The women's e-mail is never clearly better for any segment."],
+      ["Personalising doesn’t help here", 'Choosing the better e-mail per customer changes visits by ' + signedNum(best.visit_vs_baseline) +
+        ' per 1,000 (95% CI ' + signedNum(best.visit_vs_low) + ' to ' + signedNum(best.visit_vs_high) + "). The women’s e-mail is never clearly better for any segment."],
       ['Targeting saves sends, not visits', 'E-mailing only the top half by predicted uplift keeps ' + fmt.pct(keep, 0) +
         ' of the extra visits with 50% of the e-mails. Worth it only when sends are expensive.'],
     ]);
@@ -677,7 +709,7 @@
             { type: 'scatter', mode: 'lines', name: 'Customers per arm', x: xs.map((v) => v * 100), y: xs.map((v) => nFor(p, v)),
               line: { color: t.series[0], width: 2 }, hovertemplate: '+%{x:.2f} pp: %{y:,} per arm<extra></extra>' },
             { type: 'scatter', mode: 'markers', name: 'Your lift', x: [delta * 100], y: [nFor(p, delta)], showlegend: false,
-              marker: { color: t.series[0], size: 11, line: { color: t.surface, width: 2 } }, hovertemplate: 'Your lift: %{y:,} per arm<extra></extra>' },
+              marker: { color: t.person, size: 11, line: { color: t.surface, width: 2 } }, hovertemplate: 'Your lift: %{y:,} per arm<extra></extra>' },
           ],
           layout: {
             xaxis: { title: { text: 'Lift to detect (percentage points)' }, ticksuffix: ' pp', showgrid: false },
@@ -708,10 +740,10 @@
       const mde = zsum() * Math.sqrt((2 * inp.p * (1 - inp.p)) / P.n_per_arm);
       box.appendChild(big);
       [
-        'customers per arm to detect ' + fmt.pct(inp.p, 2) + ' → ' + fmt.pct(inp.p + inp.delta, 2) + ' (' + fmt.signedPct(inp.delta / inp.p, 0) + ' relative).',
+        'customers per arm to detect ' + fmt.pct(inp.p, 2) + ' to ' + fmt.pct(inp.p + inp.delta, 2) + ' (' + fmt.signedPct(inp.delta / inp.p, 0) + ' relative).',
         'A two-arm test needs ' + fmt.int(2 * n) + ' customers; the three-arm design used here needs ' + fmt.int(3 * n) + '.',
         'With ' + fmt.int(P.n_per_arm) + ' per arm, the smallest detectable lift at these settings is ' + fmt.pp(mde, 2) + '.',
-      ].forEach((l) => { const p = document.createElement('p'); p.style.margin = '6px 0 0'; p.textContent = l; box.appendChild(p); });
+      ].forEach((l) => { const p = document.createElement('p'); p.textContent = l; box.appendChild(p); });
     }
 
     metric.addEventListener('change', () => { setDefaults(); readout(); card.update(); });
@@ -721,8 +753,9 @@
 
   async function main() {
     Viz.initTheme(el('theme-toggle'));
+    contents();
     try {
-      D = await Viz.loadJSON('data/dashboard.json');
+      D = curly(await Viz.loadJSON('data/dashboard.json'));
     } catch (err) {
       el('meta-size').textContent = 'Could not load the data: ' + err.message;
       return;
